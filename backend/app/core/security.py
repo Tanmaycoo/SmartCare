@@ -4,19 +4,35 @@ from jose import jwt
 from passlib.context import CryptContext
 from app.core.config import settings
 
-# Password hashing configuration
+# Password hashing configuration using bcrypt scheme
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT configuration constants
 ALGORITHM = "HS256"
 
+def _truncate_password(password: str) -> str:
+    """Ensure password byte length does not exceed bcrypt's 72-byte limit."""
+    if not password:
+        return ""
+    encoded = password.encode("utf-8")
+    if len(encoded) > 72:
+        return encoded[:72].decode("utf-8", errors="ignore")
+    return password
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain text password against its hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    if not plain_password or not hashed_password:
+        return False
+    safe_password = _truncate_password(plain_password)
+    try:
+        return pwd_context.verify(safe_password, hashed_password)
+    except Exception:
+        return False
 
 def get_password_hash(password: str) -> str:
     """Generate a bcrypt hash of the password."""
-    return pwd_context.hash(password)
+    safe_password = _truncate_password(password)
+    return pwd_context.hash(safe_password)
 
 def create_access_token(subject: Union[str, Any], role: str, expires_delta: timedelta = None) -> str:
     """Create a signed JWT access token containing subject (email) and user role."""

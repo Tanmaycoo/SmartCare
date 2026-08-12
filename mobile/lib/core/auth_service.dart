@@ -3,24 +3,16 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smartcare/core/api_config.dart';
 
 /// AuthService handles all backend communication for authentication,
 /// JWT token management, and user session persistence.
 class AuthService {
-  static const String _configuredBaseUrl = String.fromEnvironment(
-    'SMARTCARE_API_BASE_URL',
-  );
-  static const Duration _requestTimeout = Duration(seconds: 8);
+  /// Centralized API Base URL
+  static String get baseUrl => ApiConfig.baseUrl;
 
-  // Override with:
-  // flutter run --dart-define=SMARTCARE_API_BASE_URL=http://<your-local-ip>:8000
-  static String get baseUrl {
-    if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:8000';
-    }
-    return 'http://localhost:8000';
-  }
+  /// Timeout set to 45s to handle Render free-tier instance cold starts
+  static const Duration _requestTimeout = Duration(seconds: 45);
 
   static const String _tokenKey = 'smartcare_jwt_token';
   static const String _userKey = 'smartcare_user_data';
@@ -32,28 +24,55 @@ class AuthService {
       final decoded = jsonDecode(response.body);
       if (decoded is Map<String, dynamic>) return decoded;
     } catch (_) {
-      // Fall through to the generic response error below.
+      // Fall through to the generic response error handling
     }
 
-    return <String, dynamic>{'detail': 'Unexpected server response'};
+    return <String, dynamic>{'detail': 'Unexpected response format'};
   }
 
-  static String _errorFrom(Map<String, dynamic> data, String fallback) {
+  static String _extractErrorMessage(
+    http.Response response,
+    Map<String, dynamic> data,
+    String fallback,
+  ) {
+    if (response.statusCode == 401) {
+      return 'Invalid email or password.';
+    }
+    if (response.statusCode == 404) {
+      return 'Requested server endpoint was not found (404).';
+    }
+    if (response.statusCode >= 500) {
+      return 'Server error (${response.statusCode}). Please try again later.';
+    }
+
     final detail = data['detail'];
     if (detail is String && detail.isNotEmpty) return detail;
     if (detail != null) return detail.toString();
     return fallback;
   }
 
-  static Map<String, dynamic> _connectionFailure(String action) {
+  static Map<String, dynamic> _handleNetworkException(
+    dynamic error,
+    String action,
+  ) {
+    if (kDebugMode) {
+      debugPrint('[AuthService] Network error during $action: $error');
+    }
+    if (error is TimeoutException) {
+      return {
+        'success': false,
+        'error':
+            'Server is taking longer than expected to respond (Render cold start). Please try again in a moment.',
+      };
+    }
     return {
       'success': false,
       'error':
-          'Unable to $action. Check that the backend is running and reachable.',
+          'Unable to connect to SmartCare server. Please check your internet connection.',
     };
   }
 
-  // ---------- Token Management ----------
+  // ---------- Token & Session Persistence ----------
 
   /// Save JWT token to local storage
   static Future<void> saveToken(String token) async {
@@ -107,6 +126,9 @@ class AuthService {
     required String role,
   }) async {
     try {
+      if (kDebugMode) {
+        debugPrint('[AuthService] POST $baseUrl/auth/register');
+      }
       final response = await http
           .post(
             Uri.parse('$baseUrl/auth/register'),
@@ -121,6 +143,12 @@ class AuthService {
           )
           .timeout(_requestTimeout);
 
+      if (kDebugMode) {
+        debugPrint(
+          '[AuthService] POST /auth/register status: ${response.statusCode}',
+        );
+      }
+
       final data = _decodeJsonMap(response);
       if (response.statusCode == 201) {
         return {'success': true, 'data': data};
@@ -128,12 +156,10 @@ class AuthService {
 
       return {
         'success': false,
-        'error': _errorFrom(data, 'Registration failed'),
+        'error': _extractErrorMessage(response, data, 'Registration failed'),
       };
-    } on TimeoutException {
-      return _connectionFailure('register');
-    } catch (_) {
-      return _connectionFailure('register');
+    } catch (e) {
+      return _handleNetworkException(e, 'registration');
     }
   }
 
@@ -143,6 +169,9 @@ class AuthService {
     required String password,
   }) async {
     try {
+      if (kDebugMode) {
+        debugPrint('[AuthService] POST $baseUrl/auth/login');
+      }
       final response = await http
           .post(
             Uri.parse('$baseUrl/auth/login'),
@@ -150,6 +179,12 @@ class AuthService {
             body: jsonEncode({'email': email, 'password': password}),
           )
           .timeout(_requestTimeout);
+
+      if (kDebugMode) {
+        debugPrint(
+          '[AuthService] POST /auth/login status: ${response.statusCode}',
+        );
+      }
 
       final data = _decodeJsonMap(response);
       if (response.statusCode == 200) {
@@ -165,11 +200,12 @@ class AuthService {
         return {'success': true, 'data': data};
       }
 
-      return {'success': false, 'error': _errorFrom(data, 'Login failed')};
-    } on TimeoutException {
-      return _connectionFailure('sign in');
-    } catch (_) {
-      return _connectionFailure('sign in');
+      return {
+        'success': false,
+        'error': _extractErrorMessage(response, data, 'Login failed'),
+      };
+    } catch (e) {
+      return _handleNetworkException(e, 'sign in');
     }
   }
 
@@ -181,6 +217,9 @@ class AuthService {
     }
 
     try {
+      if (kDebugMode) {
+        debugPrint('[AuthService] GET $baseUrl/auth/me');
+      }
       final response = await http
           .get(
             Uri.parse('$baseUrl/auth/me'),
@@ -190,6 +229,12 @@ class AuthService {
             },
           )
           .timeout(_requestTimeout);
+
+      if (kDebugMode) {
+        debugPrint(
+          '[AuthService] GET /auth/me status: ${response.statusCode}',
+        );
+      }
 
       final data = _decodeJsonMap(response);
       if (response.statusCode == 200) {
@@ -203,12 +248,14 @@ class AuthService {
 
       return {
         'success': false,
-        'error': _errorFrom(data, 'Failed to fetch profile'),
+        'error': _extractErrorMessage(
+          response,
+          data,
+          'Failed to fetch profile',
+        ),
       };
-    } on TimeoutException {
-      return _connectionFailure('check your saved session');
-    } catch (_) {
-      return _connectionFailure('check your saved session');
+    } catch (e) {
+      return _handleNetworkException(e, 'profile retrieval');
     }
   }
 }

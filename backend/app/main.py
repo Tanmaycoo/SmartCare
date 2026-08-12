@@ -1,15 +1,27 @@
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.routers import auth as auth_router
 from app.routers import hospital as hospital_router
+from app.database.init_db import init_db
 import app.models  # noqa: F401 - ensures all models are registered on Base metadata
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager to handle automatic DB initialization & seeding on startup."""
+    try:
+        init_db()
+    except Exception as e:
+        print(f"Startup DB initialization warning: {e}")
+    yield
 
 app = FastAPI(
     title=settings.APP_NAME,
     description="Real-Time Hospital Resource & Emergency Management System API",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 def get_cors_origins():
@@ -31,11 +43,17 @@ app.add_middleware(
 app.include_router(auth_router.router)
 app.include_router(hospital_router.router)
 
+@app.get("/", tags=["Root"])
+def root():
+    return {
+        "message": "SmartCare API is running",
+        "status": "ok"
+    }
+
 @app.get("/health", tags=["Health"])
 def health_check():
     return {
-        "status": "ok",
-        "service": "smartcare-backend"
+        "status": "ok"
     }
 
 if __name__ == "__main__":
