@@ -1,10 +1,8 @@
-// ignore_for_file: deprecated_member_use, prefer_final_fields
-
 import 'package:flutter/material.dart';
 import 'package:smartcare/core/auth_service.dart';
 import 'package:smartcare/screens/hospital_dashboard_screen.dart';
-import 'package:smartcare/screens/system_admin_hospital_screen.dart';
 import 'package:smartcare/screens/patient_hospital_list_screen.dart';
+import 'package:smartcare/screens/admin_hospital_approval_screen.dart';
 
 void main() {
   runApp(const SmartCareApp());
@@ -1312,7 +1310,7 @@ class SystemAdminDashboard extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => const SystemAdminHospitalScreen(),
+                builder: (_) => const AdminHospitalApprovalScreen(),
               ),
             );
           },
@@ -1332,7 +1330,7 @@ class SystemAdminDashboard extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => const SystemAdminHospitalScreen(),
+                builder: (_) => const AdminHospitalApprovalScreen(),
               ),
             );
           },

@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 /// Central API Configuration for SmartCare Mobile Client.
 class ApiConfig {
   /// Optional build-time parameter override:

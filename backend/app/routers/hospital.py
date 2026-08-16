@@ -15,17 +15,20 @@ from app.routers.deps import (
 
 router = APIRouter(prefix="/hospitals", tags=["Hospitals"])
 
+# Rules.md §3: Hospital Staff CAN register a hospital (status starts as PENDING)
+# allow_hospital_staff includes: hospital_staff, hospital_admin, system_admin
+
 @router.post("", response_model=HospitalResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/", response_model=HospitalResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_hospital(
     hospital_in: HospitalCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(allow_hospital_admin)
+    current_user: User = Depends(allow_hospital_staff),  # rules.md §3: HOSPITAL_STAFF can register
 ):
     """
     Register a new hospital.
-    Only HOSPITAL_ADMIN or SYSTEM_ADMIN can create hospitals.
-    Initial status: PENDING verification, INACTIVE status.
+    HOSPITAL_STAFF, HOSPITAL_ADMIN, or SYSTEM_ADMIN can create hospitals.
+    Initial status: PENDING verification, INACTIVE — not visible to patients until admin approves.
     """
     hospital = Hospital(
         name=hospital_in.name,
@@ -40,7 +43,10 @@ def create_hospital(
         emergency_available=hospital_in.emergency_available,
         verification_status=VerificationStatus.PENDING,
         status=HospitalStatus.INACTIVE,
-        admin_id=current_user.id if current_user.role == UserRole.HOSPITAL_ADMIN else None
+        created_by=current_user.id,
+        admin_id=current_user.id if current_user.role in (
+            UserRole.HOSPITAL_ADMIN, UserRole.SYSTEM_ADMIN
+        ) else None,
     )
     db.add(hospital)
     db.commit()

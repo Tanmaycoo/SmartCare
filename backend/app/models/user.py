@@ -24,7 +24,7 @@ class User(Base):
 
     # Relationships
     staff_profile = relationship("HospitalStaff", back_populates="user", uselist=False)
-    hospitals_managed = relationship("Hospital", back_populates="admin")
+    hospitals_managed = relationship("Hospital", back_populates="admin", foreign_keys="[Hospital.admin_id]")
     emergency_requests = relationship("EmergencyRequest", back_populates="patient")
     notifications = relationship("Notification", back_populates="user")
     bed_changes = relationship("BedStatusHistory", back_populates="changed_by")
