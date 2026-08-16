@@ -61,61 +61,11 @@ class SmartCareApp extends StatelessWidget {
 // AUTH GATE - Checks saved token and routes accordingly
 // ============================================================================
 
-class AuthGate extends StatefulWidget {
+class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
   @override
-  State<AuthGate> createState() => _AuthGateState();
-}
-
-class _AuthGateState extends State<AuthGate> {
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkAuth();
-  }
-
-  Future<void> _checkAuth() async {
-    try {
-      final isLoggedIn = await AuthService.isLoggedIn();
-      if (isLoggedIn) {
-        final result = await AuthService.getMe();
-        if (!mounted) return;
-
-        if (result['success'] == true) {
-          final userData = result['data'] as Map<String, dynamic>;
-          final role = userData['role'] as String;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => RoleBasedHome(role: role, userData: userData),
-            ),
-          );
-          return;
-        }
-
-        await AuthService.clearAuth();
-      }
-    } catch (_) {
-      await AuthService.clearAuth();
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(color: Color(0xFF00A896)),
-        ),
-      );
-    }
     return const LoginScreen();
   }
 }
